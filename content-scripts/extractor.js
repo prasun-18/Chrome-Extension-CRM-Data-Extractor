@@ -1,133 +1,90 @@
-import { isContactsView } from "../utils/domHelpers.js";
-import { showIndicator } from "./shadowIndicator.js";
-
-/* --------------------------------
-   Utility: Wait for Contacts DOM
-----------------------------------*/
-function waitForContactsToLoad(timeout = 4000) {
-  return new Promise((resolve) => {
-    const startTime = Date.now();
-
-    // If already present, resolve immediately
-    if (document.querySelectorAll('a[href^="mailto:"]').length > 0) {
-      resolve();
-      return;
-    }
-
-    const observer = new MutationObserver(() => {
-      if (document.querySelectorAll('a[href^="mailto:"]').length > 0) {
-        observer.disconnect();
-        resolve();
-      }
-
-      if (Date.now() - startTime > timeout) {
-        observer.disconnect();
-        resolve(); // fail-safe
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  });
+/* ---------------------------------------------------------
+   HELPERS
+--------------------------------------------------------- */
+function isTargetView() {
+  const url = window.location.href;
+  return url.includes("/leads") || url.includes("/contacts") || 
+         url.includes("/opportunities") || url.includes("/tasks");
 }
 
-/* --------------------------------
-   ID Generator (Stable)
-----------------------------------*/
-function generateContactId(name, emails) {
-  const base = `${name}_${emails[0] || ""}`;
-  return `contact_${btoa(unescape(encodeURIComponent(base)))}`;
+function generateId(prefix, seed) {
+  const str = `${prefix}-${seed}`.replace(/\s+/g, '-').toLowerCase();
+  return `${prefix}_${btoa(unescape(encodeURIComponent(str)))}`;
 }
 
-/* --------------------------------
-   Contacts Extraction Logic
-----------------------------------*/
-function extractContacts() {
-  const contactsMap = new Map();
-
-  // Close renders rows dynamically; keep selectors flexible
-  const rows = document.querySelectorAll(
-    '[role="row"], .list-row, li, div'
-  );
+/* ---------------------------------------------------------
+   EXTRACTION ENGINE
+--------------------------------------------------------- */
+function extractData() {
+  const results = { contacts: [], opportunities: [], tasks: [] };
+  const rows = document.querySelectorAll('tr, [role="row"], .ContactListRow, .list-row');
 
   rows.forEach((row) => {
+    // 1. CONTACTS
     const emailEls = row.querySelectorAll('a[href^="mailto:"]');
-    if (emailEls.length === 0) return; // Not a contact row
-
-    const phoneEls = row.querySelectorAll('a[href^="tel:"]');
-
-    const nameEl =
-      row.querySelector("strong") ||
-      row.querySelector(".name") ||
-      row.querySelector('[data-testid*="name"]');
-
-    const leadEl =
-      row.querySelector(".lead") ||
-      row.querySelector(".company") ||
-      row.querySelector('[data-testid*="company"]');
-
-    const name = nameEl?.innerText?.trim();
-    if (!name) return;
-
-    const emails = Array.from(emailEls)
-      .map(e => e.innerText.trim())
-      .filter(Boolean);
-
-    const phones = Array.from(phoneEls)
-      .map(p => p.innerText.trim())
-      .filter(Boolean);
-
-    const lead = leadEl?.innerText?.trim() || "";
-
-    const id = generateContactId(name, emails);
-
-    // Deduplicate within the same extraction run
-    if (!contactsMap.has(id)) {
-      contactsMap.set(id, {
-        id,
-        name,
-        emails,
-        phones,
-        lead
-      });
+    if (emailEls.length > 0) {
+      const nameEl = row.querySelector('td:first-child a, [data-testid*="name"], .ContactName');
+      const name = nameEl?.innerText?.trim() || "Unknown Contact";
+      
+      if (name !== "Name" && name !== "Unknown Contact") {
+          results.contacts.push({ 
+            id: generateId('con', name + (emailEls[0]?.innerText || Math.random())), 
+            name, 
+            emails: Array.from(emailEls).map(e => e.innerText.trim()), 
+            phones: Array.from(row.querySelectorAll('a[href^="tel:"]')).map(p => p.innerText.trim()), 
+            lead: row.querySelector('td:nth-child(2), .lead')?.innerText?.trim() || ""
+          });
+      }
+      return; 
     }
-  });
 
-  return Array.from(contactsMap.values());
-}
-
-/* --------------------------------
-   Message Listener (MV3 Safe)
-----------------------------------*/
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type !== "RUN_EXTRACTION") return;
-
-  (async () => {
-    if (!isContactsView()) {
-      showIndicator("error", "Not on Contacts view");
-      sendResponse({
-        status: "error",
-        message: "Not on Close Contacts view"
+    // 2. OPPORTUNITIES
+    const valueEl = row.querySelector('[data-testid*="value"], .opportunity-value, .OpportunityValue');
+    if (valueEl) {
+      const oppName = row.querySelector('.opp-name, [data-testid*="title"], .OpportunityTitle')?.innerText?.trim() || "Opportunity";
+      results.opportunities.push({
+        id: generateId('opp', oppName),
+        name: oppName,
+        value: valueEl.innerText.trim(),
+        status: row.querySelector('.status, .OpportunityStatus')?.innerText?.trim() || "Active",
+        closeDate: row.querySelector('.date, .ExpectedCloseDate')?.innerText?.trim() || ""
       });
       return;
     }
 
-    showIndicator("loading", "Extracting contacts…");
+    // 3. TASKS
+    const taskText = row.querySelector('.description, .TaskDescription, [data-testid*="task"]');
+    if (taskText) {
+      results.tasks.push({
+        id: generateId('task', taskText.innerText.trim()),
+        description: taskText.innerText.trim(),
+        dueDate: row.querySelector('.due-date, .TaskDueDate')?.innerText?.trim() || "No date",
+        assignee: "Me",
+        done: !!row.querySelector('[type="checkbox"]:checked')
+      });
+    }
+  });
 
-    await waitForContactsToLoad();
+  return results;
+}
 
-    const contacts = extractContacts();
-
-    showIndicator("success", `Extracted ${contacts.length} contacts`);
-
-    sendResponse({
-      status: "success",
-      data: { contacts }
-    });
-  })();
-
-  return true;
+/* ---------------------------------------------------------
+   MESSAGE LISTENER
+--------------------------------------------------------- */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "RUN_EXTRACTION") {
+    (async () => {
+      try {
+        if (!isTargetView()) {
+          sendResponse({ status: "error", message: "Navigate to a list view in Close" });
+          return;
+        }
+        const data = extractData();
+        sendResponse({ status: "success", data: data });
+      } catch (err) {
+        sendResponse({ status: "error", message: err.message });
+      }
+    })();
+    return true; 
+  }
 });
-
