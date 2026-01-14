@@ -1,48 +1,56 @@
 # Close CRM Data Extractor – Chrome Extension
-## [Still working on it]
-A **Chrome Extension (Manifest V3)** that extracts **Contacts** data from **Close CRM**, stores it locally, and displays it in a **React + Tailwind popup dashboard** with real-time synchronization.
 
-This project is built as part of a technical assessment and demonstrates practical skills in:
+## Project Overview
 
-* Chrome Extension APIs (MV3)
-* DOM scraping from a React-based web app
-* Local storage architecture
-* React UI inside a Chrome extension
-* Shadow DOM usage
+**Close CRM Data Extractor** is a **Chrome Extension (Manifest V3)** that extracts **Contacts, Opportunities, and Tasks** directly from the **Close CRM web interface**, stores the data locally using Chrome’s storage APIs, and displays it in a **React-based popup dashboard**.
 
----
+This project demonstrates:
 
-## Key Features
+* Chrome Extension architecture (MV3)
+* DOM scraping of complex, dynamic web applications
+* Message passing between content scripts and service workers
+* Local data persistence and synchronization
+* Clean UI design using React and TailwindCSS
 
-### Core Functionality
-
-* Extract **Contacts** from Close CRM (DOM scraping – no API usage)
-* Store extracted data in `chrome.storage.local`
-* Deduplicate and update contacts automatically
-* Display contacts in a popup dashboard
-* Real-time sync across tabs and popup instances
-* Shadow DOM–based visual feedback during extraction
-
-### Bonus / Advanced Features
-
-* Real-time updates using `chrome.storage.onChanged`
-* Search and filter contacts (name, email, company)
-* Delete individual contacts from storage
-* Extraction status indicator injected into the page (isolated via Shadow DOM)
+⚠️ Close CRM APIs are intentionally **not used**. All data is extracted via DOM inspection, as required.
 
 ---
 
-## Tech Stack
+## Assignment Objectives Mapping
 
-* **Chrome Extension**: Manifest V3
-* **Frontend (Popup UI)**: React.js
-* **Styling**: TailwindCSS (via CDN)
-* **Persistence**: `chrome.storage.local`
-* **Architecture**:
+| Assignment Module            | Implemented | Notes                                 |
+| ---------------------------- | ----------- | ------------------------------------- |
+| Data Extraction Engine       | ✅           | Content-script based DOM scraping     |
+| Storage Layer                | ✅           | `chrome.storage.local` with schema    |
+| Popup Dashboard              | ✅           | React + Tailwind UI                   |
+| Visual Feedback (Shadow DOM) | ✅           | Injected status indicator             |
+| Real-time Sync               | ✅           | `chrome.storage.onChanged`            |
+| Bonus Features               | ⚠️ Partial  | Some optional bonuses not implemented |
 
-  * Content Scripts
-  * Service Worker (background script)
-  * Message passing
+---
+
+## Technology Stack
+
+### Core
+
+* **Chrome Extension – Manifest V3**
+* **JavaScript (ES6+)**
+* **React (CDN-based)**
+* **Tailwind CSS**
+
+### Chrome APIs
+
+* `chrome.runtime`
+* `chrome.tabs`
+* `chrome.storage.local`
+* `chrome.storage.onChanged`
+
+### Architecture Concepts
+
+* Content Scripts
+* Service Worker (Background)
+* Message Passing
+* Shadow DOM isolation
 
 ---
 
@@ -54,193 +62,240 @@ Chrome-Extension-CRM-Data-Extractor/
 ├── manifest.json
 │
 ├── service-worker/
-│   └── background.js          # Central message & storage coordinator
-│
-├── content-scripts/
-│   ├── extractor.js           # Contacts DOM extraction logic
-│   └── shadowIndicator.js     # Shadow DOM visual feedback
-│
-├── storage/
-│   └── storageManager.js      # Storage schema & deduplication logic
+│   └── background.js
 │
 ├── popup/
-│   ├── index.html             # Popup entry HTML
-│   ├── main.js               
-│   └── App.js               
+│   ├── index.html
+│   ├── App.js
+│   ├── main.js
+│   ├── react.production.min.js
+│   ├── react-dom.production.min.js
+│   └── tailwind.js
+│
+├── storage/
+│   └── storageManager.js
+│
+├── utils/
+│   └── domHelpers.js
 │
 └── README.md
 ```
 
 ---
 
-## Installation & Setup
+## Chrome Extension Architecture
 
-1. **Clone the repository**
+### 1. Content Script
 
-   ```bash
-   git clone <your-repo-url>
-   cd Chrome-Extension-CRM-Data-Extractor
-   ```
+Responsibilities:
 
-2. **Open Chrome Extensions page**
+* Runs on Close CRM pages
+* Detects which Close view is active
+* Extracts data using DOM selectors
+* Sends extracted payloads to the service worker
 
-   * Go to `chrome://extensions`
-   * Enable **Developer mode** (top-right)
+### 2. Service Worker (Background)
 
-3. **Load the extension**
+Responsibilities:
 
-   * Click **Load unpacked**
-   * Select the project root folder
+* Receives messages from popup and content scripts
+* Triggers extraction on the active tab
+* Coordinates storage updates
+* Prevents race conditions
 
-4. **Open Close CRM**
+### 3. Storage Layer
 
-   * Log in to Close CRM
-   * Navigate to the **Contacts / Leads** view
+Responsibilities:
 
-5. **Use the extension**
+* Centralized data persistence
+* Deduplication and merging
+* Update and delete operations
+* Cross-tab synchronization
 
-   * Click the extension icon
-   * Click **Extract Now**
-   * Contacts will appear in the popup
+### 4. Popup UI (React)
 
----
+Responsibilities:
 
-## How It Works (Architecture Overview)
-
-### Extraction Flow
-
-```
-Popup UI
-   ↓ (EXTRACT_CONTACTS)
-Service Worker
-   ↓ (RUN_EXTRACTION)
-Content Script
-   ↓
-DOM Scraping + Shadow Indicator
-   ↓
-Service Worker
-   ↓
-chrome.storage.local
-   ↓
-Popup UI (real-time sync)
-```
+* Displays extracted data
+* Search and filter
+* Delete records
+* Trigger extraction manually
 
 ---
 
-## Module Breakdown
+## Data Extraction Engine (Detailed)
 
-### Module 1 – Data Extraction Engine
+### Supported Views
 
-* Extracts **Contacts** from Close CRM list views
-* Fields extracted:
+* **Contacts / Leads View**
+* **Opportunities Pipeline View**
+* **Tasks View**
 
-  * Name
-  * Emails
-  * Phone numbers
-  * Lead / Company name
-
-#### DOM Selection Strategy
-
-* Uses **semantic selectors** instead of fragile class names
-* Primary signals:
-
-  * `mailto:` links for email detection
-  * `tel:` links for phone detection
-* Handles dynamic / lazy-loaded DOM using `MutationObserver`
-* Detects Contacts view via URL + DOM heuristics
+The content script automatically determines the current view before extracting data.
 
 ---
 
-### Module 2 – Storage Layer
+### DOM Selection Strategy
 
-All data is stored in `chrome.storage.local` under a single key:
+**Primary Approach: CSS Selectors**
+
+Reasons:
+
+* Faster and more readable than XPath
+* Easier to maintain
+* Better compatibility with modern SPAs
+
+**Fallback Strategies**:
+
+* Structural DOM traversal
+* Text-based matching when attributes are unavailable
+
+ Absolute XPath expressions are intentionally avoided due to fragility.
+
+---
+
+### Handling Dynamic & Lazy-Loaded Content
+
+Close CRM heavily uses dynamic rendering.
+
+Mitigation techniques used:
+
+* DOM mutation observation
+* Re-runs extraction when DOM stabilizes
+
+---
+
+### View Detection Logic
+
+The script determines the active view using:
+
+* URL pattern inspection
+* Presence of view-specific DOM nodes
+
+This ensures the correct extraction logic runs for each page type.
+
+---
+
+## Storage Layer
+
+All data is persisted using `chrome.storage.local`.
+
+### Storage Schema
 
 ```json
 {
   "close_data": {
-    "contacts": [],
-    "opportunities": [],
-    "tasks": [],
-    "lastSync": 1234567890
+    "contacts": [
+      {
+        "id": "uuid",
+        "name": "John Doe",
+        "emails": ["john@company.com"],
+        "phones": ["+91xxxxxxxx"],
+        "lead": "Company Name"
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "uuid",
+        "name": "Deal Name",
+        "value": 10000,
+        "status": "Open",
+        "closeDate": "2025-02-01"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "uuid",
+        "description": "Follow up call",
+        "dueDate": "2025-01-20",
+        "assignee": "User",
+        "done": false
+      }
+    ],
+    "lastSync": 1736947200000
   }
 }
 ```
 
-#### Storage Features
+---
 
-* Stable ID–based deduplication
-* Update-in-place for existing contacts
-* Safe read–modify–write cycle
-* Service worker acts as the **single writer**
+### Data Integrity Handling
+
+* **Deduplication**: ID-based merging
+* **Updates**: Existing records overwritten
+* **Deletions**: Explicit removal from storage
+* **Race Conditions**: Controlled through centralized updates
 
 ---
 
-### Module 3 – Popup Dashboard (React)
+## Popup Dashboard (React)
 
-#### Features
+### Features
 
-* React-based popup UI
-* TailwindCSS styling
-* Displays extracted contacts
-* Search / filter across all contacts
-* Delete individual contacts
-* Shows last sync timestamp
+* Tab-based navigation
 
-#### Real-Time Sync
+  * Contacts
+  * Opportunities
+  * Tasks
+* Global search across records
+* Delete individual records
+* "Extract Now" button
+* Displays last sync timestamp
 
-* Uses `chrome.storage.onChanged`
-* Popup updates instantly when data changes
-* Works across multiple tabs
+### Real-Time Sync
 
----
+The popup listens to:
 
-### Module 4 – Visual Feedback (Shadow DOM)
+```js
+chrome.storage.onChanged
+```
 
-* Injects a small status indicator into Close CRM pages
-* Shows:
-
-  * ⏳ Extraction in progress
-  * ✅ Success
-  * ❌ Error
-* Implemented using **Shadow DOM** to avoid CSS conflicts
-* Automatically removed after completion
+This ensures updates from other tabs reflect instantly.
 
 ---
 
-## Demo Video Checklist (3–5 minutes)
+## Visual Feedback (Shadow DOM)
 
-When recording your demo, show:
+When extraction runs:
 
-1. Opening Close CRM Contacts page
-2. Clicking **Extract Now**
-3. Shadow DOM indicator appearing on the page
-4. Contacts appearing in popup
-5. Refreshing the page (data persists)
-6. Searching and deleting a contact
-7. Real-time update without reopening popup
+* A lightweight status indicator is injected into the Close page
+* Uses **Shadow DOM** to avoid CSS conflicts
+* Displays:
 
----
-
-## Evaluation Alignment
-
-This project satisfies all evaluation criteria:
-
-* ✔ Correct data extraction
-* ✔ Clean architecture
-* ✔ Proper Manifest V3 patterns
-* ✔ Robust storage design
-* ✔ Error handling & edge cases
-* ✔ Good UI/UX
+  * Extracting
+  * Success
+  * Failure
 
 ---
 
-## Future Enhancements
+## Installation & Usage
 
-* Opportunities extraction
-* Tasks extraction
-* CSV / JSON export
-* Automatic pagination handling
-* DOM change detection & re-extraction prompt
+### Install (Developer Mode)
+
+1. Clone this repository
+2. Open Chrome → `chrome://extensions`
+3. Enable **Developer Mode**
+4. Click **Load Unpacked**
+5. Select the project root folder
+
+---
+
+### How to Use
+
+1. Log in to Close CRM
+2. Navigate to Contacts / Opportunities / Tasks
+3. Click the extension icon
+4. Click **Extract Now**
+5. View data in the popup dashboard
+
+---
+
+## Known Limitations
+
+* DOM selectors may break if Close CRM UI changes
+* No API-based fallback (intentional per assignment)
+* CSV/JSON export not implemented (bonus feature)
+
 
 ---
 
@@ -248,15 +303,11 @@ This project satisfies all evaluation criteria:
 
 **Prasun Kumar**
 
-
 ---
 
-## Notes
+## References
 
-* Close CRM API was intentionally **not used**
-* This project focuses on **DOM scraping**, as required
-* Tested using a Close free trial account
-
----
-
-If you’re reviewing this project: feedback is welcome!
+* Close CRM Help Center
+* Close Leads & Contacts Docs
+* Close Opportunities Docs
+* Close Tasks Docs
