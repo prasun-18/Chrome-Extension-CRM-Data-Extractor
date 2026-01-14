@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Close CRM Data Extractor",
+  "description": "Extract Contacts, Opportunities, and Tasks from Close CRM",
+  "version": "1.0.0",
+
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "https://*.close.com/*"
+  ],
+
+  "background": {
+    "service_worker": "service-worker/background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/index.html"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://*.close.com/*"],
+      "js": ["content-scripts/extractor.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
