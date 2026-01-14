@@ -1,5 +1,5 @@
 # Close CRM Data Extractor – Chrome Extension
-
+## [Still working on it]
 A **Chrome Extension (Manifest V3)** that extracts **Contacts** data from **Close CRM**, stores it locally, and displays it in a **React + Tailwind popup dashboard** with real-time synchronization.
 
 This project is built as part of a technical assessment and demonstrates practical skills in:
